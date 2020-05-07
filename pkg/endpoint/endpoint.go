@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/rancher/kine/pkg/drivers/dqlite"
+	"github.com/rancher/kine/pkg/drivers/mssql"
 	"github.com/rancher/kine/pkg/drivers/mysql"
 	"github.com/rancher/kine/pkg/drivers/pgsql"
 	"github.com/rancher/kine/pkg/drivers/sqlite"
@@ -25,6 +26,7 @@ const (
 	ETCDBackend     = "etcd3"
 	MySQLBackend    = "mysql"
 	PostgresBackend = "postgres"
+	MSSQLBackend    = "sqlserver"
 )
 
 type Config struct {
@@ -127,6 +129,8 @@ func getKineStorageBackend(ctx context.Context, driver, dsn string, cfg Config) 
 		backend, err = sqlite.New(ctx, dsn)
 	case DQLiteBackend:
 		backend, err = dqlite.New(ctx, dsn)
+	case MSSQLBackend:
+		backend, err = mssql.New(ctx, dsn)
 	case PostgresBackend:
 		backend, err = pgsql.New(ctx, dsn, cfg.Config)
 	case MySQLBackend:
@@ -134,7 +138,7 @@ func getKineStorageBackend(ctx context.Context, driver, dsn string, cfg Config) 
 	default:
 		return false, nil, fmt.Errorf("storage backend is not defined")
 	}
-
+	fmt.Println(err)
 	return leaderElect, backend, err
 }
 
