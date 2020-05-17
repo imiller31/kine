@@ -4,12 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
-	"strconv"
 	"strings"
 
 	mssql "github.com/denisenkom/go-mssqldb"
-	"github.com/rancher/kine/pkg/drivers/generic"
 	"github.com/rancher/kine/pkg/logstructured"
 	"github.com/rancher/kine/pkg/logstructured/sqllog"
 	"github.com/rancher/kine/pkg/server"
@@ -24,7 +21,7 @@ var (
 		`if not exists (select * from sysobjects where name='kine' and xtype='U')
 		create table kine
  			(
- 				id INT IDENTITY(1,1),
+ 				id INT IDENTITY(1,1) PRIMARY KEY,
 				name VARCHAR(630),
 				created BIGINT,
 				deleted BIGINT,
@@ -32,8 +29,7 @@ var (
  				prev_revision INT,
  				lease INT,
  				value VARBINARY(max),
-				old_value VARBINARY(max),
-				PRIMARY KEY (id)
+				old_value VARBINARY(max)
 			 );`,
 		`IF NOT EXISTS (SELECT name from sys.indexes  
 			WHERE name = N'kine_name_index')
@@ -54,7 +50,7 @@ func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
 		return nil, err
 	}
 	fmt.Printf("parsedDSN: %v\n", parsedDSN)
-	dialect, err := generic.Open(ctx, "sqlserver", parsedDSN, "$", true)
+	dialect, err := Open(ctx, "sqlserver", parsedDSN, "?", true)
 	if err != nil {
 		return nil, err
 	}
@@ -83,16 +79,6 @@ func setup(db *sql.DB) error {
 	}
 
 	return nil
-}
-
-func q(sql string) string {
-	regex := regexp.MustCompile(`\?`)
-	pref := "$"
-	n := 0
-	return regex.ReplaceAllStringFunc(sql, func(string) string {
-		n++
-		return pref + strconv.Itoa(n)
-	})
 }
 
 func prepareDSN(dataSourceName string) (string, error) {

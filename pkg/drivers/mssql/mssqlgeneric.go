@@ -1,4 +1,4 @@
-package generic
+package mssql
 
 import (
 	"context"
@@ -16,42 +16,164 @@ import (
 )
 
 var (
-	columns = "kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value"
-	revSQL  = `
-		SELECT rkv.id
+	revSQL = `
+		SELECT TOP(1) rkv.id
 		FROM kine rkv
 		ORDER BY rkv.id
-		DESC LIMIT 1`
+		DESC
+	`
 
 	compactRevSQL = `
-		SELECT crkv.prev_revision
+		SELECT TOP(1) crkv.prev_revision
 		FROM kine crkv
 		WHERE crkv.name = 'compact_rev_key'
-		ORDER BY crkv.id DESC LIMIT 1`
+		ORDER BY crkv.id DESC
+	`
 
-	idOfKey = `
-		AND mkv.id <= ? AND mkv.id > (
-			SELECT ikv.id
-			FROM kine ikv
-			WHERE
-				ikv.name = ? AND
-				ikv.id <= ?
-			ORDER BY ikv.id DESC LIMIT 1)`
-
-	listSQL = fmt.Sprintf(`SELECT (%s), (%s), %s
+	getRevisionSQL = `
+	SELECT
+			0, 0, kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value
+			FROM kine kv
+			WHERE kv.id = ?
+	`
+	getCurrentSQL = `
+	SELECT (
+		SELECT TOP(1) rkv.id
+		FROM kine rkv
+		ORDER BY rkv.id
+		DESC ), (
+		SELECT TOP(1) crkv.prev_revision
+		FROM kine crkv
+		WHERE crkv.name = 'compact_rev_key'
+		ORDER BY crkv.id DESC), kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value
 		FROM kine kv
 		JOIN (
 			SELECT MAX(mkv.id) as id
 			FROM kine mkv
 			WHERE
-				mkv.name LIKE ?
-				%%s
+				mkv.name LIKE '%?%'
+				
 			GROUP BY mkv.name) maxkv
 	    ON maxkv.id = kv.id
 		WHERE
-			  (kv.deleted = 0 OR ?)
+			  (kv.deleted = 0 OR kv.deleted = ?)
 		ORDER BY kv.id ASC
-		`, revSQL, compactRevSQL, columns)
+	`
+
+	listRevisionStartSQL = `
+	SELECT (
+		SELECT TOP(1) rkv.id
+		FROM kine rkv
+		ORDER BY rkv.id
+		DESC ), (
+		SELECT TOP(1) crkv.prev_revision
+		FROM kine crkv
+		WHERE crkv.name = 'compact_rev_key'
+		ORDER BY crkv.id DESC), kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value
+		FROM kine kv
+		JOIN (
+			SELECT MAX(mkv.id) as id
+			FROM kine mkv
+			WHERE
+				mkv.name LIKE '%?%'
+				and mkv.id  <= ?
+				
+			GROUP BY mkv.name) maxkv
+	    ON maxkv.id = kv.id
+		WHERE
+			  (kv.deleted = 0 OR kv.deleted = ?)
+		ORDER BY kv.id ASC
+	`
+
+	getRevisionAfterSQL = `
+	SELECT (
+		SELECT TOP(1) rkv.id
+		FROM kine rkv
+		ORDER BY rkv.id
+		DESC ), (
+		SELECT TOP(1) crkv.prev_revision
+		FROM kine crkv
+		WHERE crkv.name = 'compact_rev_key'
+		ORDER BY crkv.id DESC), kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value
+		FROM kine kv
+		JOIN (
+			SELECT MAX(mkv.id) as id
+			FROM kine mkv
+			WHERE
+				mkv.name LIKE '%?%'
+				AND mkv.id <= ? and mkv.id > (
+					SELECT TOP(1) ikv.id
+					FROM kine ikv
+					WHERE
+						ikv.name = '?' AND
+						ikv.id <= ?
+					ORDER BY ikv.id DESC)	
+			GROUP BY mkv.name) maxkv
+	    ON maxkv.id = kv.id
+		WHERE
+			  (kv.deleted = 0 OR kv.deleted = ?)
+		ORDER BY kv.id ASC
+	`
+
+	countSQL = `
+	SELECT (
+		SELECT TOP(1) rkv.id
+		FROM kine rkv
+		ORDER BY rkv.id
+		DESC), COUNT(c.theid)
+			FROM (
+				SELECT TOP 100 PERCENT kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value
+		FROM kine kv
+		JOIN (
+			SELECT MAX(mkv.id) as id
+			FROM kine mkv
+			WHERE
+				mkv.name LIKE '%?%'
+				
+			GROUP BY mkv.name) maxkv
+	    ON maxkv.id = kv.id
+		WHERE
+			  (kv.deleted = 0 OR kv.deleted = ?)
+		ORDER BY kv.id ASC
+		
+			) c
+	`
+
+	afterSQL = `
+	SELECT (
+		SELECT TOP 1 rkv.id
+		FROM kine rkv
+		ORDER BY rkv.id
+		DESC), (
+		SELECT TOP 1 crkv.prev_revision
+		FROM kine crkv
+		WHERE crkv.name = 'compact_rev_key'
+		ORDER BY crkv.id DESC), kv.id as theid, kv.name, kv.created, kv.deleted, kv.create_revision, kv.prev_revision, kv.lease, kv.value, kv.old_value
+			FROM kine kv
+			WHERE
+				kv.name LIKE '%?%' AND
+				kv.id > ?
+			ORDER BY kv.id ASC
+	`
+
+	insertSQL = `
+	DECLARE @OutputTable table(
+		id int,
+		name VARCHAR(630),
+		created BIGINT,
+		deleted BIGINT,
+		create_revision INT,
+		prev_revision INT,
+		lease INT,
+		value VARBINARY(max),
+		old_value VARBINARY(max)
+	);
+	INSERT dbo.kine 
+		OUTPUT INSERTED.id, INSERTED.name, INSERTED.created, INSERTED.deleted, INSERTED.create_revision, INSERTED.prev_revision, INSERTED.lease, INSERTED.value, INSERTED.old_value
+		INTO @OutputTable 
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?);
+	SELECT id FROM @OutputTable;
+	`
 )
 
 type Stripped string
@@ -64,7 +186,7 @@ func (s Stripped) String() string {
 type ErrRetry func(error) bool
 type TranslateErr func(error) error
 
-type Generic struct {
+type MssqlGeneric struct {
 	sync.Mutex
 
 	LockWrites            bool
@@ -102,7 +224,7 @@ func q(sql, param string, numbered bool) string {
 	})
 }
 
-func (d *Generic) Migrate(ctx context.Context) {
+func (d *MssqlGeneric) Migrate(ctx context.Context) {
 	var (
 		count     = 0
 		countKV   = d.queryRow(ctx, "SELECT COUNT(*) FROM key_value")
@@ -144,7 +266,7 @@ func openAndTest(driverName, dataSourceName string) (*sql.DB, error) {
 	return db, nil
 }
 
-func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter string, numbered bool) (*Generic, error) {
+func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter string, numbered bool) (*MssqlGeneric, error) {
 	var (
 		db  *sql.DB
 		err error
@@ -164,32 +286,18 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 		}
 	}
 
-	return &Generic{
+	return &MssqlGeneric{
 		DB: db,
 
-		GetRevisionSQL: q(fmt.Sprintf(`
-			SELECT
-			0, 0, %s
-			FROM kine kv
-			WHERE kv.id = ?`, columns), paramCharacter, numbered),
+		GetRevisionSQL: q(getRevisionSQL, paramCharacter, numbered),
 
-		GetCurrentSQL:        q(fmt.Sprintf(listSQL, ""), paramCharacter, numbered),
-		ListRevisionStartSQL: q(fmt.Sprintf(listSQL, "AND mkv.id <= ?"), paramCharacter, numbered),
-		GetRevisionAfterSQL:  q(fmt.Sprintf(listSQL, idOfKey), paramCharacter, numbered),
+		GetCurrentSQL:        q(getCurrentSQL, paramCharacter, numbered),
+		ListRevisionStartSQL: q(listRevisionStartSQL, paramCharacter, numbered),
+		GetRevisionAfterSQL:  q(getRevisionAfterSQL, paramCharacter, numbered),
 
-		CountSQL: q(fmt.Sprintf(`
-			SELECT (%s), COUNT(c.theid)
-			FROM (
-				%s
-			) c`, revSQL, fmt.Sprintf(listSQL, "")), paramCharacter, numbered),
+		CountSQL: q(countSQL, paramCharacter, numbered),
 
-		AfterSQL: q(fmt.Sprintf(`
-			SELECT (%s), (%s), %s
-			FROM kine kv
-			WHERE
-				kv.name LIKE ? AND
-				kv.id > ?
-			ORDER BY kv.id ASC`, revSQL, compactRevSQL, columns), paramCharacter, numbered),
+		AfterSQL: q(afterSQL, paramCharacter, numbered),
 
 		DeleteSQL: q(`
 			DELETE FROM kine
@@ -203,26 +311,25 @@ func Open(ctx context.Context, driverName, dataSourceName string, paramCharacter
 		InsertLastInsertIDSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			values(?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
 
-		InsertSQL: q(`INSERT INTO kine(name, created, deleted, create_revision, prev_revision, lease, value, old_value)
-			values(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`, paramCharacter, numbered),
+		InsertSQL: q(insertSQL, paramCharacter, numbered),
 
 		FillSQL: q(`INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value)
 			values(?, ?, ?, ?, ?, ?, ?, ?, ?)`, paramCharacter, numbered),
 	}, err
 }
 
-func (d *Generic) query(ctx context.Context, sql string, args ...interface{}) (*sql.Rows, error) {
+func (d *MssqlGeneric) query(ctx context.Context, sql string, args ...interface{}) (*sql.Rows, error) {
 	fmt.Printf("QUERY %v : %s\n", args, Stripped(sql))
 	logrus.Tracef("QUERY %v : %s", args, Stripped(sql))
 	return d.DB.QueryContext(ctx, sql, args...)
 }
 
-func (d *Generic) queryRow(ctx context.Context, sql string, args ...interface{}) *sql.Row {
+func (d *MssqlGeneric) queryRow(ctx context.Context, sql string, args ...interface{}) *sql.Row {
 	logrus.Tracef("QUERY ROW %v : %s", args, Stripped(sql))
 	return d.DB.QueryRowContext(ctx, sql, args...)
 }
 
-func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) (result sql.Result, err error) {
+func (d *MssqlGeneric) execute(ctx context.Context, sql string, args ...interface{}) (result sql.Result, err error) {
 	if d.LockWrites {
 		d.Lock()
 		defer d.Unlock()
@@ -245,7 +352,7 @@ func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) 
 	return
 }
 
-func (d *Generic) GetCompactRevision(ctx context.Context) (int64, error) {
+func (d *MssqlGeneric) GetCompactRevision(ctx context.Context) (int64, error) {
 	var id int64
 	row := d.queryRow(ctx, compactRevSQL)
 	err := row.Scan(&id)
@@ -255,45 +362,45 @@ func (d *Generic) GetCompactRevision(ctx context.Context) (int64, error) {
 	return id, err
 }
 
-func (d *Generic) SetCompactRevision(ctx context.Context, revision int64) error {
+func (d *MssqlGeneric) SetCompactRevision(ctx context.Context, revision int64) error {
 	_, err := d.execute(ctx, d.UpdateCompactSQL, revision)
 	return err
 }
 
-func (d *Generic) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error) {
+func (d *MssqlGeneric) GetRevision(ctx context.Context, revision int64) (*sql.Rows, error) {
 	return d.query(ctx, d.GetRevisionSQL, revision)
 }
 
-func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
+func (d *MssqlGeneric) DeleteRevision(ctx context.Context, revision int64) error {
 	_, err := d.execute(ctx, d.DeleteSQL, revision)
 	return err
 }
 
-func (d *Generic) ListCurrent(ctx context.Context, prefix string, limit int64, includeDeleted bool) (*sql.Rows, error) {
+func (d *MssqlGeneric) ListCurrent(ctx context.Context, prefix string, limit int64, includeDeleted bool) (*sql.Rows, error) {
 	sql := d.GetCurrentSQL
 	if limit > 0 {
-		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+		sql = strings.Replace(sql, "SELECT", fmt.Sprintf("SELECT TOP(%d)", limit), 1)
 	}
 	return d.query(ctx, sql, prefix, includeDeleted)
 }
 
-func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error) {
+func (d *MssqlGeneric) List(ctx context.Context, prefix, startKey string, limit, revision int64, includeDeleted bool) (*sql.Rows, error) {
 	if startKey == "" {
 		sql := d.ListRevisionStartSQL
 		if limit > 0 {
-			sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+			sql = strings.Replace(sql, "SELECT", fmt.Sprintf("SELECT TOP(%d)", limit), 1)
 		}
 		return d.query(ctx, sql, prefix, revision, includeDeleted)
 	}
 
 	sql := d.GetRevisionAfterSQL
 	if limit > 0 {
-		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+		sql = strings.Replace(sql, "SELECT", fmt.Sprintf("SELECT TOP(%d)", limit), 1)
 	}
 	return d.query(ctx, sql, prefix, revision, startKey, revision, includeDeleted)
 }
 
-func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error) {
+func (d *MssqlGeneric) Count(ctx context.Context, prefix string) (int64, int64, error) {
 	var (
 		rev sql.NullInt64
 		id  int64
@@ -304,7 +411,7 @@ func (d *Generic) Count(ctx context.Context, prefix string) (int64, int64, error
 	return rev.Int64, id, err
 }
 
-func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
+func (d *MssqlGeneric) CurrentRevision(ctx context.Context) (int64, error) {
 	var id int64
 	row := d.queryRow(ctx, revSQL)
 	err := row.Scan(&id)
@@ -314,24 +421,24 @@ func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 	return id, err
 }
 
-func (d *Generic) After(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
+func (d *MssqlGeneric) After(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
 	sql := d.AfterSQL
 	if limit > 0 {
-		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+		sql = strings.Replace(sql, "SELECT", fmt.Sprintf("SELECT TOP(%d)", limit), 1)
 	}
 	return d.query(ctx, sql, prefix, rev)
 }
 
-func (d *Generic) Fill(ctx context.Context, revision int64) error {
+func (d *MssqlGeneric) Fill(ctx context.Context, revision int64) error {
 	_, err := d.execute(ctx, d.FillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
 	return err
 }
 
-func (d *Generic) IsFill(key string) bool {
+func (d *MssqlGeneric) IsFill(key string) bool {
 	return strings.HasPrefix(key, "gap-")
 }
 
-func (d *Generic) Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (id int64, err error) {
+func (d *MssqlGeneric) Insert(ctx context.Context, key string, create, delete bool, createRevision, previousRevision int64, ttl int64, value, prevValue []byte) (id int64, err error) {
 	if d.TranslateErr != nil {
 		defer func() {
 			if err != nil {
