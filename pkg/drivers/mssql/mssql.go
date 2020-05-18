@@ -50,13 +50,19 @@ func New(ctx context.Context, dataSourceName string) (server.Backend, error) {
 		return nil, err
 	}
 	fmt.Printf("parsedDSN: %v\n", parsedDSN)
-	dialect, err := Open(ctx, "sqlserver", parsedDSN, "?", true)
+	dialect, err := Open(ctx, "sqlserver", parsedDSN, "@p", true)
 	if err != nil {
 		return nil, err
 	}
 	fmt.Println("got past dialext")
 	dialect.TranslateErr = func(err error) error {
-		if err, ok := err.(*mssql.Error); ok && err.Number == 23505 {
+		if test, ok := err.(*mssql.Error); ok {
+			fmt.Printf("MSSQL Error: num: %v --- sqlNum: %v\n", test.Number, test.SQLErrorNumber())
+		}
+		if err, ok := err.(*mssql.Error); ok && err.Number == 2601 {
+			return server.ErrKeyExists
+		}
+		if strings.Contains(err.Error(), "Cannot insert duplicate") {
 			return server.ErrKeyExists
 		}
 		return err

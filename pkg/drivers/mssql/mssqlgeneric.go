@@ -347,6 +347,7 @@ func (d *MssqlGeneric) execute(ctx context.Context, sql string, args ...interfac
 			wait(i)
 			continue
 		}
+		logrus.Error(err)
 		return result, err
 	}
 	return
