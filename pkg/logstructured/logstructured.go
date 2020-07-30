@@ -2,7 +2,6 @@ package logstructured
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -87,7 +86,6 @@ func (l *LogStructured) Create(ctx context.Context, key string, value []byte, le
 	}()
 
 	rev, prevEvent, err := l.get(ctx, key, 0, true)
-	fmt.Println(err)
 	if err != nil {
 		return 0, err
 	}

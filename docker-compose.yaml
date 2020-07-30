@@ -1,0 +1,21 @@
+version: "3"
+
+services:
+  server:
+    image: kine:latest
+    restart: on-failure
+    command: --endpoint="sqlserver://sa:LocalP@ssw0rd@sql:1433?database=test2"
+    ports:
+      - 2379:2379
+  kinehax:
+    image: kinehax:latest
+    restart: on-failure
+    command: createdb --userName=dbadmin --password="LocalP@ssw0rd" --serverName=ismillekine --oldDb=kine --ccpId=123456789101112
+  sql:
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=LocalP@ssw0rd
+    ports:
+      - 1433:1433
+      - 1434:1434
+    image: mcr.microsoft.com/mssql/server:2019-latest

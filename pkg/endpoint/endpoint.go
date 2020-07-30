@@ -9,10 +9,10 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/rancher/kine/pkg/drivers/dqlite"
-	"github.com/rancher/kine/pkg/drivers/mssql"
 	"github.com/rancher/kine/pkg/drivers/mysql"
 	"github.com/rancher/kine/pkg/drivers/pgsql"
 	"github.com/rancher/kine/pkg/drivers/sqlite"
+	"github.com/rancher/kine/pkg/drivers/sqlserver"
 	"github.com/rancher/kine/pkg/server"
 	"github.com/rancher/kine/pkg/tls"
 	"github.com/sirupsen/logrus"
@@ -26,7 +26,7 @@ const (
 	ETCDBackend     = "etcd3"
 	MySQLBackend    = "mysql"
 	PostgresBackend = "postgres"
-	MSSQLBackend    = "sqlserver"
+	SQLServer       = "sqlserver"
 )
 
 type Config struct {
@@ -94,7 +94,7 @@ func Listen(ctx context.Context, config Config) (ETCDConfig, error) {
 
 func createListener(listen string) (ret net.Listener, rerr error) {
 	network, address := networkAndAddress(listen)
-
+	logrus.Infof("Network: %v and Address: %v", network, address)
 	if network == "unix" {
 		if err := os.Remove(address); err != nil && !os.IsNotExist(err) {
 			logrus.Warnf("failed to remove socket %s: %v", address, err)
@@ -123,22 +123,23 @@ func getKineStorageBackend(ctx context.Context, driver, dsn string, cfg Config) 
 		leaderElect = true
 		err         error
 	)
+	logrus.Infof("Driver: %v", driver)
 	switch driver {
 	case SQLiteBackend:
 		leaderElect = false
 		backend, err = sqlite.New(ctx, dsn)
 	case DQLiteBackend:
 		backend, err = dqlite.New(ctx, dsn)
-	case MSSQLBackend:
-		backend, err = mssql.New(ctx, dsn)
 	case PostgresBackend:
 		backend, err = pgsql.New(ctx, dsn, cfg.Config)
 	case MySQLBackend:
 		backend, err = mysql.New(ctx, dsn, cfg.Config)
+	case SQLServer:
+		backend, err = sqlserver.New(ctx, dsn, cfg.Config)
 	default:
 		return false, nil, fmt.Errorf("storage backend is not defined")
 	}
-	fmt.Println(err)
+
 	return leaderElect, backend, err
 }
 

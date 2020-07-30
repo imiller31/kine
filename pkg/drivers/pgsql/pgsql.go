@@ -3,7 +3,6 @@ package pgsql
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -62,17 +61,6 @@ func New(ctx context.Context, dataSourceName string, tlsInfo tls.Config) (server
 		}
 		return err
 	}
-	fmt.Printf("GetRevisionSQL: %s \n", dialect.GetRevisionSQL)
-	fmt.Printf("GetCurrentSQL: %s \n", dialect.GetCurrentSQL)
-	fmt.Printf("ListRevisionStartSQL: %s \n", dialect.ListRevisionStartSQL)
-	fmt.Printf("GetRevisionAfterSQL: %s \n", dialect.GetRevisionAfterSQL)
-	fmt.Printf("CountSQL: %s \n", dialect.CountSQL)
-	fmt.Printf("AfterSQL: %s \n", dialect.AfterSQL)
-	fmt.Printf("DeleteSQL: %s \n", dialect.DeleteSQL)
-	fmt.Printf("UpdateCompactSQL: %s \n", dialect.UpdateCompactSQL)
-	fmt.Printf("InsertLastInsertIDSQL: %s \n", dialect.InsertLastInsertIDSQL)
-	fmt.Printf("InsertSQL: %s \n", dialect.InsertSQL)
-	fmt.Printf("FillSQL: %s \n", dialect.FillSQL)
 
 	if err := setup(dialect.DB); err != nil {
 		return nil, err
@@ -179,8 +167,6 @@ func prepareDSN(dataSourceName string, tlsInfo tls.Config) (string, error) {
 	for k, v := range queryMap {
 		params.Add(k, v[0])
 	}
-	params.Add("sslmode", "disable")
 	u.RawQuery = params.Encode()
-	fmt.Println("prepared DSN")
 	return u.String(), nil
 }

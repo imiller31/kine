@@ -47,6 +47,7 @@ func main() {
 		},
 		cli.BoolFlag{Name: "debug"},
 	}
+	logrus.Infof("endpoint: %v", config.Endpoint)
 	app.Action = run
 
 	if err := app.Run(os.Args); err != nil {
