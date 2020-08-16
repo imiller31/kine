@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -50,7 +49,7 @@ type countStruct struct {
 func (db *CosmosDb) Count(ctx context.Context, prefix string) (int64, int64, error) {
 	logrus.Debugf("COUNT %s", prefix)
 
-	if err := db.connect(ctx); err != nil {
+	if err := db.connect(); err != nil {
 		return 0, 0, err
 	}
 
@@ -89,7 +88,7 @@ func New(ctx context.Context, dataSourceName string) (*CosmosDb, error) {
 	if err := driver.prepareCosmosDb(dataSourceName); err != nil {
 		return nil, err
 	}
-	if err := driver.connect(ctx); err != nil {
+	if err := driver.connect(); err != nil {
 		return nil, err
 	}
 	modIndex := mongo.IndexModel{
@@ -108,7 +107,7 @@ func New(ctx context.Context, dataSourceName string) (*CosmosDb, error) {
 }
 
 func (db *CosmosDb) getGlobalRevision(ctx context.Context) (int64, error) {
-	if err := db.connect(ctx); err != nil {
+	if err := db.connect(); err != nil {
 		return 0, err
 	}
 
@@ -125,7 +124,7 @@ func (db *CosmosDb) getGlobalRevision(ctx context.Context) (int64, error) {
 	var revision []Etcd
 	err = rs.All(ctx, &revision)
 	if err != nil {
-		logrus.Error(fmt.Sprintf("getGlobalRevision: %v", err))
+		logrus.Errorf("getGlobalRevision: %s", err)
 		return 0, err
 	}
 	return revision[0].ID.Timestamp().UnixNano(), nil
@@ -140,8 +139,11 @@ func (db *CosmosDb) prepareCosmosDb(dataSourceName string) error {
 }
 
 // connects to MongoDB
-func (db *CosmosDb) connect(ctx context.Context) error {
+func (db *CosmosDb) connect() error {
+	ctx, cancel:= context.WithTimeout(context.Background(), 10 * time.Second)
+	defer cancel()
 	logrus.Debug("attempting to connect to mongodb")
+
 	clientOptions := options.Client().ApplyURI(db.connStr).SetDirect(true)
 	c, err := mongo.NewClient(clientOptions)
 	if err != nil {
@@ -168,7 +170,7 @@ func (db *CosmosDb) connect(ctx context.Context) error {
 func (db *CosmosDb) Create(ctx context.Context, key string, value []byte, lease int64) (int64, error) {
 	logrus.Debugf("CREATE %s", key)
 
-	if err := db.connect(ctx); err != nil {
+	if err := db.connect(); err != nil {
 		return 0, err
 	}
 
@@ -197,7 +199,7 @@ func (db *CosmosDb) Create(ctx context.Context, key string, value []byte, lease 
 func (db *CosmosDb) Get(ctx context.Context, key string, revision int64) (int64, *server.KeyValue, error) {
 	logrus.Debugf("GET %s, revision=%d", key, revision)
 
-	if err := db.connect(ctx); err != nil {
+	if err := db.connect(); err != nil {
 		return 0, nil, err
 	}
 
@@ -235,7 +237,7 @@ func (db *CosmosDb) Get(ctx context.Context, key string, revision int64) (int64,
 func (db *CosmosDb) List(ctx context.Context, prefix, startKey string, limit, revision int64) (int64, []*server.KeyValue, error) {
 	logrus.Debugf("LIST %s, revision=%d", prefix, revision)
 
-	if err := db.connect(ctx); err != nil {
+	if err := db.connect(); err != nil {
 		return 0, nil, err
 	}
 
@@ -280,7 +282,7 @@ func (db *CosmosDb) List(ctx context.Context, prefix, startKey string, limit, re
 		logrus.Errorf("List after iterate: %v", err)
 		return 0, nil, err
 	}
-	log.Println(list)
+
 	var outList []*server.KeyValue
 	for _, val := range list {
 			outList = append(outList, &server.KeyValue{
@@ -310,7 +312,7 @@ func (db *CosmosDb) Update(ctx context.Context, key string, value []byte, revisi
 		return 0, nil, false, nil
 	}
 
-	if err := db.connect(ctx); err != nil {
+	if err := db.connect(); err != nil {
 		return 0, nil, false, err
 	}
 
@@ -343,7 +345,7 @@ func (db *CosmosDb) Update(ctx context.Context, key string, value []byte, revisi
 }
 
 func (db *CosmosDb) Watch(ctx context.Context, prefix string, revision int64) <-chan []*server.Event {
-	if err := db.connect(ctx); err != nil {
+	if err := db.connect(); err != nil {
 		return nil
 	}
 
@@ -351,7 +353,7 @@ func (db *CosmosDb) Watch(ctx context.Context, prefix string, revision int64) <-
 
 	// starting watching right away so we don't miss anything
 	ctx, cancel := context.WithCancel(ctx)
-
+	//TODO: Actually make this work and use change streams
 	result := make(chan []*server.Event, 100)
 
 	rev, kvs, err := db.List(ctx, prefix, "", revision, 0)
