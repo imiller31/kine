@@ -111,12 +111,11 @@ func (db *CosmosDb) getGlobalRevision(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 
-	var filter primitive.D
 	ops := options.Find()
 	ops.SetSort(primitive.D{{"_id", -1}})
 	ops.SetLimit(1)
 
-	rs, err := db.collection.Find(ctx, filter, ops)
+	rs, err := db.collection.Find(ctx, primitive.D{}, ops)
 	if err != nil {
 		return 0, err
 	}
