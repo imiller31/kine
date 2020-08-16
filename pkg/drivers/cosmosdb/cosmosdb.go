@@ -264,10 +264,12 @@ func (db *CosmosDb) List(ctx context.Context, prefix, startKey string, limit, re
 
 	replace := primitive.D{{"$replaceRoot", primitive.D{{"newRoot", "$record"}}}}
 
+	limitStage := primitive.D{{"$limit", limit}}
+
 	var pipeline mongo.Pipeline
 
 	if limit > 0 {
-		pipeline = mongo.Pipeline{filter, group, project, primitive.D{{"$limit", limit}}, unwind, replace}
+		pipeline = mongo.Pipeline{filter, group, project, limitStage, unwind, replace}
 	} else {
 		pipeline = mongo.Pipeline{filter, group, project, unwind, replace}
 	}
