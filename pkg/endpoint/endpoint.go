@@ -3,6 +3,7 @@ package endpoint
 import (
 	"context"
 	"fmt"
+	"github.com/rancher/kine/pkg/drivers/cosmosdb"
 	"net"
 	"os"
 	"strings"
@@ -136,6 +137,8 @@ func getKineStorageBackend(ctx context.Context, driver, dsn string, cfg Config) 
 		backend, err = mysql.New(ctx, dsn, cfg.Config)
 	case SQLServer:
 		backend, err = sqlserver.New(ctx, dsn, cfg.Config)
+	case "mongodb":
+		backend, err = cosmosdb.New(ctx, dsn)
 	default:
 		return false, nil, fmt.Errorf("storage backend is not defined")
 	}

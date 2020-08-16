@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 
 	"go.etcd.io/etcd/etcdserver/etcdserverpb"
 )
@@ -28,6 +29,7 @@ func (l *LimitedServer) create(ctx context.Context, put *etcdserverpb.PutRequest
 		return nil, unsupported("prevKv")
 	}
 
+	fmt.Printf("CREATE LOG: %v", put)
 	rev, err := l.backend.Create(ctx, string(put.Key), put.Value, put.Lease)
 	if err == ErrKeyExists {
 		return &etcdserverpb.TxnResponse{
