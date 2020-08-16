@@ -215,7 +215,14 @@ func (db *CosmosDb) Get(ctx context.Context, key string, revision int64) (int64,
 	result := kineCollection.FindOne(context.TODO(), filter, ops)
 	var out Etcd
 	if err := result.Decode(&out); err != nil {
-		logrus.Error(fmt.Sprintf("Get: %v", err))
+		logrus.Error("GET: %v", err)
+		if err.Error() == "mongo: no documents in result" {
+			currRev, err := db.getGlobalRevision(context.TODO())
+			if err != nil {
+				return 0, nil, err
+			}
+			return currRev, nil, nil
+		}
 		return 0, nil, err
 	}
 
