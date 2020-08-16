@@ -308,6 +308,7 @@ func (db *CosmosDb) List(ctx context.Context, prefix, startKey string, limit, re
 	}
 	currRev, err := db.getGlobalRevision(ctx)
 	if err != nil {
+		logrus.Debugf("LIST getCurrentRev error: %v", err)
 		return 0, nil, err
 	}
 	return currRev, outList, nil
