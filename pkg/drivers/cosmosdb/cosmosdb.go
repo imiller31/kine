@@ -126,6 +126,10 @@ func (db *CosmosDb) getGlobalRevision(ctx context.Context) (int64, error) {
 		logrus.Errorf("getGlobalRevision: %s", err)
 		return 0, err
 	}
+
+	if len(revision) == 0 {
+		return time.Now().UnixNano(), nil
+	}
 	return revision[0].ID.Timestamp().UnixNano(), nil
 }
 
