@@ -271,6 +271,8 @@ func (db *CosmosDb) List(ctx context.Context, prefix, startKey string, limit, re
 	} else {
 		pipeline = mongo.Pipeline{filter, group, project, unwind, replace}
 	}
+
+	logrus.Debugf("LIST pipeline: %s", pipeline)
 	res, err := db.collection.Aggregate(context.TODO(), pipeline)
 	if err != nil {
 		logrus.Errorf("List after agggregate: %v", err)
