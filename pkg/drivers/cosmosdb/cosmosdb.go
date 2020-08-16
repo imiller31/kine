@@ -64,7 +64,7 @@ func (db *CosmosDb) Count(ctx context.Context, prefix string) (int64, int64, err
 
 	res, err := db.collection.Aggregate(ctx, mongo.Pipeline{filter, count})
 	if err != nil {
-		logrus.Error(fmt.Sprintf("Count after aggregate %v", err))
+		logrus.Errorf("Count after aggregate %v", err)
 		return 0, 0, err
 	}
 
@@ -215,7 +215,7 @@ func (db *CosmosDb) Get(ctx context.Context, key string, revision int64) (int64,
 	result := kineCollection.FindOne(context.TODO(), filter, ops)
 	var out Etcd
 	if err := result.Decode(&out); err != nil {
-		logrus.Error("GET: %v", err)
+		logrus.Errorf("GET: %v", err)
 		if err.Error() == "mongo: no documents in result" {
 			currRev, err := db.getGlobalRevision(context.TODO())
 			if err != nil {
@@ -284,15 +284,17 @@ func (db *CosmosDb) List(ctx context.Context, prefix, startKey string, limit, re
 	logrus.Debugf("LIST pipeline: %s", pipeline)
 	res, err := db.collection.Aggregate(context.TODO(), pipeline)
 	if err != nil {
-		logrus.Errorf("List after agggregate: %v", err)
+		logrus.Errorf("LIST after agggregate: %v", err)
 		return 0, nil, err
 	}
 
 	var list []Etcd
 	if err = res.All(context.TODO(), &list); err != nil {
-		logrus.Errorf("List after iterate: %v", err)
+		logrus.Errorf("LIST after iterate: %v", err)
 		return 0, nil, err
 	}
+
+	logrus.Debugf("LIST results: %s", list)
 
 	var outList []*server.KeyValue
 	for _, val := range list {
