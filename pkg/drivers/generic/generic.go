@@ -97,6 +97,8 @@ type Generic struct {
 	TranslateErr          TranslateErr
 	ErrCode               ErrCode
 	FillRetryDuration     time.Duration
+
+	ApplyLimit func(string, int64) string
 }
 
 func q(sql, param string, numbered bool) string {
@@ -200,6 +202,10 @@ func Open(ctx context.Context, driverName, dataSourceName string, connPoolConfig
 	return &Generic{
 		DB: db,
 
+		ApplyLimit: func(sql string, limit int64) string {
+			return fmt.Sprintf("%s LIMIT %d", sql, limit)
+		},
+
 		GetRevisionSQL: q(fmt.Sprintf(`
 			SELECT
 			0, 0, %s
@@ -273,7 +279,6 @@ func (d *Generic) execute(ctx context.Context, sql string, args ...interface{}) 
 		d.Lock()
 		defer d.Unlock()
 	}
-
 	wait := strategy.Backoff(backoff.Linear(100 + time.Millisecond))
 	for i := uint(0); i < 20; i++ {
 		logrus.Tracef("EXEC (try: %d) %v : %s", i, args, util.Stripped(sql))
@@ -336,7 +341,7 @@ func (d *Generic) DeleteRevision(ctx context.Context, revision int64) error {
 func (d *Generic) ListCurrent(ctx context.Context, prefix, startKey string, limit int64, includeDeleted bool) (*sql.Rows, error) {
 	sql := d.GetCurrentSQL
 	if limit > 0 {
-		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+		sql = d.ApplyLimit(sql, limit)
 	}
 	return d.query(ctx, sql, prefix, startKey, includeDeleted)
 }
@@ -345,14 +350,14 @@ func (d *Generic) List(ctx context.Context, prefix, startKey string, limit, revi
 	if startKey == "" {
 		sql := d.ListRevisionStartSQL
 		if limit > 0 {
-			sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+			sql = d.ApplyLimit(sql, limit)
 		}
 		return d.query(ctx, sql, prefix, revision, includeDeleted)
 	}
 
 	sql := d.GetRevisionAfterSQL
 	if limit > 0 {
-		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+		sql = d.ApplyLimit(sql, limit)
 	}
 	return d.query(ctx, sql, prefix, startKey, revision, includeDeleted)
 }
@@ -392,7 +397,7 @@ func (d *Generic) CurrentRevision(ctx context.Context) (int64, error) {
 func (d *Generic) After(ctx context.Context, prefix string, rev, limit int64) (*sql.Rows, error) {
 	sql := d.AfterSQL
 	if limit > 0 {
-		sql = fmt.Sprintf("%s LIMIT %d", sql, limit)
+		sql = d.ApplyLimit(sql, limit)
 	}
 	return d.query(ctx, sql, prefix, rev)
 }

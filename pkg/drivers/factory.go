@@ -7,6 +7,7 @@ import (
 
 	"github.com/k3s-io/kine/pkg/server"
 	"github.com/k3s-io/kine/pkg/util"
+	"github.com/sirupsen/logrus"
 )
 
 var ErrUnknownDriver = errors.New("unknown driver")
@@ -25,7 +26,7 @@ func New(ctx context.Context, cfg *Config) (leaderElect bool, backend server.Bac
 	}
 
 	cfg.Scheme, cfg.DataSourceName = util.SchemeAndAddress(cfg.Endpoint)
-
+	logrus.Infof("Using driver %s", cfg.Scheme)
 	driver, ok := Get(cfg.Scheme)
 	if !ok {
 		return false, nil, ErrUnknownDriver

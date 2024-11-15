@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/k3s-io/kine/pkg/server"
+	"github.com/sirupsen/logrus"
 )
 
 // Constructor is a function that takes a context and a config and returns a leaderElect bool, a server.Backend and an error
@@ -31,6 +32,7 @@ func GetDefault() Constructor {
 // Get returns the constructor for the given scheme
 // The second return value is true if the scheme is registered, false otherwise
 func Get(scheme string) (Constructor, bool) {
+	logrus.Infof("DriverRegistry: %v", driverRegistry)
 	constructor, ok := driverRegistry[scheme]
 	return constructor, ok
 }
