@@ -18,6 +18,7 @@ import (
 	"github.com/k3s-io/kine/pkg/tls"
 	"github.com/k3s-io/kine/pkg/util"
 	mssql "github.com/microsoft/go-mssqldb"
+	"github.com/microsoft/go-mssqldb/azuread"
 	"github.com/sirupsen/logrus"
 )
 
@@ -129,16 +130,19 @@ WHERE c.rn = 1 AND (c.deleted = 0 OR 'true' = ?)`
 )
 
 func New(ctx context.Context, cfg *drivers.Config) (bool, server.Backend, error) {
-	parsedDSN, err := prepareDSN(cfg.DataSourceName, cfg.BackendTLSConfig)
+	parsedDSN, isAzureSql, err := prepareDSN(cfg.DataSourceName, cfg.BackendTLSConfig)
 	if err != nil {
 		return false, nil, err
 	}
 
-	if err := createDBIfNotExist(parsedDSN); err != nil {
+	if err := createDBIfNotExist(parsedDSN, isAzureSql); err != nil {
 		return false, nil, err
 	}
-
-	dialect, err := generic.Open(ctx, "sqlserver", parsedDSN, cfg.ConnectionPoolConfig, "@p", true, cfg.MetricsRegisterer)
+	driverName := "sqlserver"
+	if isAzureSql {
+		driverName = azuread.DriverName
+	}
+	dialect, err := generic.Open(ctx, driverName, parsedDSN, cfg.ConnectionPoolConfig, "@p", true, cfg.MetricsRegisterer)
 	if err != nil {
 		return false, nil, err
 	}
@@ -206,7 +210,18 @@ ON kv.id = ks.id`
 	return true, logstructured.New(sqllog.New(dialect)), nil
 }
 
-func createDBIfNotExist(dataSourceName string) error {
+func createDBIfNotExist(dataSourceName string, isAzureSql bool) error {
+	if isAzureSql {
+		db, err := sql.Open(azuread.DriverName, dataSourceName)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		if err = db.Ping(); err != nil {
+			return err
+		}
+		return nil
+	}
 	u, err := url.Parse(dataSourceName)
 	if err != nil {
 		return err
@@ -239,8 +254,6 @@ func createDBIfNotExist(dataSourceName string) error {
 	if _, ok := err.(mssql.Error); !ok {
 		return err
 	}
-
-	logrus.Infof("err before the storm: %s", err)
 
 	if err := err.(mssql.Error); err.Number != 1801 { // 1801 = database already exists
 		db, err := sql.Open("sqlserver", u.String())
@@ -280,23 +293,28 @@ func q(sql string) string {
 	})
 }
 
-func prepareDSN(dataSourceName string, tlsInfo tls.Config) (string, error) {
+func prepareDSN(dataSourceName string, tlsInfo tls.Config) (string, bool, error) {
+	var isAzureSql bool
 	if len(dataSourceName) == 0 {
 		dataSourceName = defaultDSN
 	} else {
 		dataSourceName = "sqlserver://" + dataSourceName
 	}
+	//if strings.Contains(dataSourceName, "user id") {
+	//	return dataSourceName, nil
+	//}
 	u, err := url.Parse(dataSourceName)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	if len(u.Path) == 0 || u.Path == "/" {
-		u.Path = "/kubernetes"
-	}
+	/*
+		if len(u.Path) == 0 || u.Path == "/" {
+			u.Path = "/kubernetes"
+		}*/
 
 	queryMap, err := url.ParseQuery(u.RawQuery)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	// set up tls dsn
 	params := url.Values{}
@@ -322,12 +340,18 @@ func prepareDSN(dataSourceName string, tlsInfo tls.Config) (string, error) {
 
 	for k, v := range queryMap {
 		params.Add(k, v[0])
+		if k == "fedauth" {
+			isAzureSql = true
+		}
 	}
+
 	u.RawQuery = params.Encode()
-	return u.String(), nil
+	return u.String(), isAzureSql, nil
 }
 
 func init() {
 	drivers.Register("sqlserver", New)
+	drivers.Register("mssql", New)
+	drivers.Register("azuresql", New)
 	drivers.SetDefault("sqlserver")
 }
