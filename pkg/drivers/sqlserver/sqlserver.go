@@ -108,7 +108,7 @@ FROM (
 		%s
 ) AS maxkv
 WHERE
-	maxkv.rn = 1 AND (maxkv.deleted = 0 OR 'true' = ?)
+	maxkv.rn = 1 AND (maxkv.deleted = 0 OR 1 = ?)
 ORDER BY maxkv.name, maxkv.theid DESC`
 
 	countSQL = `
@@ -124,7 +124,7 @@ FROM (
 		kv.name LIKE ?
 		%s
 ) AS c
-WHERE c.rn = 1 AND (c.deleted = 0 OR 'true' = ?)`
+WHERE c.rn = 1 AND (c.deleted = 0 OR 1 = ?)`
 
 	getSizeSQL = `EXEC sp_spaceused 'kine'`
 )
