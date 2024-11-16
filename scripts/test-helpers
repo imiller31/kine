@@ -275,7 +275,7 @@ provision-database() {
     echo $DB_IMAGE > $TEST_DIR/databases/$count/metadata/image
     local testID=$(basename $TEST_DIR)
     local name=$(echo "database-$count-$testID" | tee $TEST_DIR/databases/$count/metadata/name)
-    local pass=$(echo "$RANDOM$RANDOM$RANDOM" | tee $TEST_DIR/databases/$count/metadata/password)
+    local pass=$(echo "S0meP@ssw0rd!" | tee $TEST_DIR/databases/$count/metadata/password)
     while [[ "$#" -gt "0" ]]; do
       echo $1 >> $TEST_DIR/databases/$count/metadata/env
       shift
@@ -287,6 +287,7 @@ provision-database() {
         -d --name $name \
         --cap-add=sys_nice \
         -e $DB_PASSWORD_ENV=$pass \
+        -e ACCEPT_EULA=Y \
         --env-file $TEST_DIR/databases/$count/metadata/env \
         ${DB_IMAGE} ${DB_ARGS}
 
