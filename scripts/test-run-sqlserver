@@ -8,7 +8,7 @@ start-test() {
 
     sleep 30
 
-    KINE_IMAGE=$IMAGE KINE_ENDPOINT="sqlserver://sa:$pass@$ip:$port" provision-kine
+    KINE_IMAGE=$IMAGE KINE_ENDPOINT="sqlserver://ismilletest.database.windows.net:1433?database=kine&fedauth=ActiveDirectoryDefault" provision-kine
     local kine_url=$(cat $TEST_DIR/kine/*/metadata/url)
     K3S_DATASTORE_ENDPOINT=$kine_url provision-cluster
 }
