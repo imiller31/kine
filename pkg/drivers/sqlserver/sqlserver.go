@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -118,7 +119,7 @@ SELECT
 FROM (
 	SELECT 
 		kv.id AS theid, kv.deleted,
-		ROW_NUMBER() OVER (PARTITION BY kv.name ORDER BY kv.name, kv.id DESC) AS rn
+		ROW_NUMBER() OVER (PARTITION BY kv.name ORDER BY kv.id DESC) AS rn
 	FROM kine AS kv
 	WHERE
 		kv.name LIKE ?
@@ -126,7 +127,12 @@ FROM (
 ) AS c
 WHERE c.rn = 1 AND (c.deleted = 0 OR 1 = ?)`
 
-	getSizeSQL = `EXEC sp_spaceused 'kine'`
+	getSizeSQL = `SELECT 
+    SUM(reserved_page_count * 8 * 1024) AS total_bytes
+FROM 
+    sys.dm_db_partition_stats
+WHERE 
+    object_id = OBJECT_ID('kine');`
 )
 
 func New(ctx context.Context, cfg *drivers.Config) (bool, server.Backend, error) {
@@ -201,6 +207,53 @@ ON kv.id = ks.id`
 		limitRewrite := fmt.Sprintf("SELECT TOP %d ", limit)
 		sql = strings.Replace(sql, "SELECT TOP 100 PERCENT", limitRewrite, 1)
 		return sql
+	}
+
+	// Write all the SQL queries to files named after their corresponding values in the dialect struct:
+	// GetCurrentSQL         string
+	//	GetRevisionSQL        string
+	//	RevisionSQL           string
+	//	ListRevisionStartSQL  string
+	//	GetRevisionAfterSQL   string
+	//	CountCurrentSQL       string
+	//	CountRevisionSQL      string
+	//	AfterSQL              string
+	//	DeleteSQL             string
+	//	CompactSQL            string
+	//	UpdateCompactSQL      string
+	//	PostCompactSQL        string
+	//	InsertSQL             string
+	//	FillSQL               string
+	//	InsertLastInsertIDSQL string
+	//	GetSizeSQL            string
+	for _, query := range []struct {
+		name string
+		sql  string
+	}{
+		{"GetCurrentSQL", dialect.GetCurrentSQL},
+		{"GetRevisionSQL", dialect.GetRevisionSQL},
+		{"RevisionSQL", dialect.RevisionSQL},
+		{"ListRevisionStartSQL", dialect.ListRevisionStartSQL},
+		{"GetRevisionAfterSQL", dialect.GetRevisionAfterSQL},
+		{"CountCurrentSQL", dialect.CountCurrentSQL},
+		{"CountRevisionSQL", dialect.CountRevisionSQL},
+		{"AfterSQL", dialect.AfterSQL},
+		{"DeleteSQL", dialect.DeleteSQL},
+		{"CompactSQL", dialect.CompactSQL},
+		{"UpdateCompactSQL", dialect.UpdateCompactSQL},
+		{"PostCompactSQL", dialect.PostCompactSQL},
+		{"InsertSQL", dialect.InsertSQL},
+		{"FillSQL", dialect.FillSQL},
+		{"InsertLastInsertIDSQL", dialect.InsertLastInsertIDSQL},
+		{"GetSizeSQL", dialect.GetSizeSQL},
+	} {
+		filename := fmt.Sprintf("sqlserver/%s.sql", query.name)
+		if err := os.MkdirAll("sqlserver", os.ModePerm); err != nil {
+			return false, nil, err
+		}
+		if err := os.WriteFile(filename, []byte(query.sql), 0644); err != nil {
+			return false, nil, err
+		}
 	}
 
 	if err := setup(dialect.DB); err != nil {
