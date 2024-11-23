@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -41,51 +40,34 @@ var (
 				prev_revision bigint,
 				lease int,
 				value varbinary(max),
-				old_value varbinary(max) )
+				old_value varbinary(max) );
+			SET IDENTITY_INSERT kine ON;
 		end 
 		`,
-		`if not exists ( select * from sys.indexes
-			where name = 'kine_name_index' and
-			object_id = OBJECT_ID('kine')) 
-		begin
-    		create nonclustered index kine_name_index on kine (name)
-		end
+		`if not exists (select * from sys.indexes where name = 'kine_name_index' and object_id = OBJECT_ID('kine'))
+			begin
+				create nonclustered index kine_name_index on kine (name) INCLUDE (id, created, deleted, create_revision, prev_revision, lease, value, old_value)
+			end
 		`,
-		`if not exists (
-			select *
-			from sys.indexes
-			where name = 'kine_name_prev_revision_uindex' and
-			object_id = OBJECT_ID('kine')
-		) begin
-		create unique index kine_name_prev_revision_uindex on kine (name, prev_revision)
-		end
+		`if not exists (select * from sys.indexes where name = 'kine_name_prev_revision_uindex' and object_id = OBJECT_ID('kine'))
+			begin
+				create unique index kine_name_prev_revision_uindex on kine (name, prev_revision) INCLUDE (id, created, deleted, create_revision, lease, value, old_value)
+			end
 		`,
-		`if not exists (
-			select *
-			from sys.indexes
-			where name = 'kine_name_prev_revision_index' and
-			object_id = OBJECT_ID('kine')
-		) begin
-		create nonclustered index kine_name_prev_revision_index on kine (prev_revision)
-		end
+		`if not exists (select * from sys.indexes where name = 'kine_name_prev_revision_index' and object_id = OBJECT_ID('kine'))
+			begin
+				create nonclustered index kine_name_prev_revision_index on kine (prev_revision) INCLUDE (name, id, created, deleted, create_revision, lease, value, old_value)
+			end
 		`,
-		`if not exists (
-			select *
-			from sys.indexes
-			where name = 'kine_id_deleted_index' and
-			object_id = OBJECT_ID('kine')
-		) begin
-		create nonclustered index kine_id_deleted_index on kine (id, deleted)
-		end
+		`if not exists (select * from sys.indexes where name = 'kine_id_deleted_index' and object_id = OBJECT_ID('kine'))
+			begin
+				create nonclustered index kine_id_deleted_index on kine (id, deleted) INCLUDE (name, created, create_revision, prev_revision, lease, value, old_value)
+			end
 		`,
-		`if not exists (
-			select *
-			from sys.indexes
-			where name = 'kine_list_query_index' and
-			object_id = OBJECT_ID('kine')
-		) begin
-		create nonclustered index kine_list_query_index on kine (name, id DESC, deleted)
-		end
+		`if not exists (select * from sys.indexes where name = 'kine_list_query_index' and object_id = OBJECT_ID('kine'))
+			begin
+				create nonclustered index kine_list_query_index on kine (name, id DESC, deleted) INCLUDE (created, create_revision, prev_revision, lease, value, old_value)
+			end
 		`,
 	}
 
@@ -154,7 +136,10 @@ func New(ctx context.Context, cfg *drivers.Config) (bool, server.Backend, error)
 	}
 
 	dialect.GetSizeSQL = getSizeSQL
+	// set the deadlock priority to high here, as we want to avoid the compactor from being killed by a deadlock with an insert
 	dialect.CompactSQL = `
+		SET DEADLOCK_PRIORITY HIGH;
+
 		DELETE kv
 FROM kine AS kv
 INNER JOIN (
@@ -207,53 +192,6 @@ ON kv.id = ks.id`
 		limitRewrite := fmt.Sprintf("SELECT TOP %d ", limit)
 		sql = strings.Replace(sql, "SELECT TOP 100 PERCENT", limitRewrite, 1)
 		return sql
-	}
-
-	// Write all the SQL queries to files named after their corresponding values in the dialect struct:
-	// GetCurrentSQL         string
-	//	GetRevisionSQL        string
-	//	RevisionSQL           string
-	//	ListRevisionStartSQL  string
-	//	GetRevisionAfterSQL   string
-	//	CountCurrentSQL       string
-	//	CountRevisionSQL      string
-	//	AfterSQL              string
-	//	DeleteSQL             string
-	//	CompactSQL            string
-	//	UpdateCompactSQL      string
-	//	PostCompactSQL        string
-	//	InsertSQL             string
-	//	FillSQL               string
-	//	InsertLastInsertIDSQL string
-	//	GetSizeSQL            string
-	for _, query := range []struct {
-		name string
-		sql  string
-	}{
-		{"GetCurrentSQL", dialect.GetCurrentSQL},
-		{"GetRevisionSQL", dialect.GetRevisionSQL},
-		{"RevisionSQL", dialect.RevisionSQL},
-		{"ListRevisionStartSQL", dialect.ListRevisionStartSQL},
-		{"GetRevisionAfterSQL", dialect.GetRevisionAfterSQL},
-		{"CountCurrentSQL", dialect.CountCurrentSQL},
-		{"CountRevisionSQL", dialect.CountRevisionSQL},
-		{"AfterSQL", dialect.AfterSQL},
-		{"DeleteSQL", dialect.DeleteSQL},
-		{"CompactSQL", dialect.CompactSQL},
-		{"UpdateCompactSQL", dialect.UpdateCompactSQL},
-		{"PostCompactSQL", dialect.PostCompactSQL},
-		{"InsertSQL", dialect.InsertSQL},
-		{"FillSQL", dialect.FillSQL},
-		{"InsertLastInsertIDSQL", dialect.InsertLastInsertIDSQL},
-		{"GetSizeSQL", dialect.GetSizeSQL},
-	} {
-		filename := fmt.Sprintf("sqlserver/%s.sql", query.name)
-		if err := os.MkdirAll("sqlserver", os.ModePerm); err != nil {
-			return false, nil, err
-		}
-		if err := os.WriteFile(filename, []byte(query.sql), 0644); err != nil {
-			return false, nil, err
-		}
 	}
 
 	if err := setup(dialect.DB); err != nil {

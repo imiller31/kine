@@ -58,6 +58,8 @@ var (
 		) AS lkv
 		ORDER BY lkv.thename ASC
 		`, revSQL, compactRevSQL, columns)
+
+	sqlNullBytes = sql.NullByte{Valid: true}
 )
 
 type ErrRetry func(error) bool
@@ -403,7 +405,7 @@ func (d *Generic) After(ctx context.Context, prefix string, rev, limit int64) (*
 }
 
 func (d *Generic) Fill(ctx context.Context, revision int64) error {
-	_, err := d.execute(ctx, d.FillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, nil, nil)
+	_, err := d.execute(ctx, d.FillSQL, revision, fmt.Sprintf("gap-%d", revision), 0, 1, 0, 0, 0, sqlNullBytes, sqlNullBytes)
 	return err
 }
 
