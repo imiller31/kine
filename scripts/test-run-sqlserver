@@ -4,11 +4,21 @@ start-test() {
     local ip=$(cat $TEST_DIR/databases/*/metadata/ip)
     local port=$(cat $TEST_DIR/databases/*/metadata/port)
     local pass=$(cat $TEST_DIR/databases/*/metadata/password)
-    local test_image=mcr.microsoft.com/mssql/server:2019-latest
+    local image=$(cat $TEST_DIR/databases/*/metadata/image)
 
-    sleep 30
-
-    KINE_IMAGE=$IMAGE KINE_ENDPOINT="sqlserver://ismilletest.database.windows.net:1433?database=kine&fedauth=ActiveDirectoryDefault" provision-kine
+    DB_CONNECTION_TEST="
+            docker run --rm
+            --name connection-test
+            -e ACCEPT_EULA=Y
+            $image
+            /opt/mssql-tools18/bin/sqlcmd
+              -S localhost
+              -C
+              -U sa
+              -P LocalP@ssw0rd
+              -Q 'SELECT * FROM sys.dm_exec_connections;'" \
+    timeout --foreground 1m bash -c "wait-for-db-connection"
+    KINE_IMAGE=$IMAGE KINE_ENDPOINT="sqlserver://$ip:$port?database=kine" provision-kine
     local kine_url=$(cat $TEST_DIR/kine/*/metadata/url)
     K3S_DATASTORE_ENDPOINT=$kine_url provision-cluster
 }
