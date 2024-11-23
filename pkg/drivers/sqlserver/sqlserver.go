@@ -32,7 +32,7 @@ var (
            WHERE TABLE_NAME = N'kine')
 		begin
  			create table kine (
-				id bigint primary key identity (1, 1),
+				id bigint primary key,
 				name varchar(630) COLLATE SQL_Latin1_General_CP1_CI_AS,  
 				created int,
 				deleted int,
@@ -43,6 +43,14 @@ var (
 				old_value varbinary(max) );
 			SET IDENTITY_INSERT kine ON;
 		end 
+		`,
+		`if not exists (select * from sys.sequences where name = 'kine_identity_sequence' AND schema_id = SCHEMA_ID('dbo'))
+			begin
+				create sequence dbo.kine_identity_sequence
+				start with 1
+				increment by 1
+				no cache
+			end
 		`,
 		`if not exists (select * from sys.indexes where name = 'kine_name_index' and object_id = OBJECT_ID('kine'))
 			begin
@@ -162,7 +170,7 @@ ON kv.id = ks.id`
 	dialect.GetRevisionAfterSQL = q(fmt.Sprintf(listSQL, "AND kv.name > ? AND kv.id <= ?"))
 	dialect.CountCurrentSQL = q(fmt.Sprintf(countSQL, "AND kv.name > ?"))
 	dialect.CountRevisionSQL = q(fmt.Sprintf(countSQL, "AND kv.name > ? AND kv.id <= ?"))
-	dialect.InsertSQL = q(`INSERT INTO kine (name, created, deleted, create_revision, prev_revision, lease, value, old_value) OUTPUT INSERTED.id VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+	dialect.InsertSQL = q(`INSERT INTO kine (id, name, created, deleted, create_revision, prev_revision, lease, value, old_value) OUTPUT INSERTED.id VALUES (NEXT VALUE FOR kine_identity_sequence, ?, ?, ?, ?, ?, ?, ?, ?)`)
 
 	dialect.FillRetryDuration = time.Millisecond + 5
 
