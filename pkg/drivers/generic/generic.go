@@ -59,7 +59,7 @@ var (
 		ORDER BY lkv.thename ASC
 		`, revSQL, compactRevSQL, columns)
 
-	sqlNullBytes = sql.NullByte{Valid: true}
+	sqlNullBytes = sql.NullByte{Valid: false}
 )
 
 type ErrRetry func(error) bool

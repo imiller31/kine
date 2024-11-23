@@ -169,8 +169,12 @@ ON kv.id = ks.id`
 	dialect.GetRevisionAfterSQL = q(fmt.Sprintf(listSQL, "AND kv.name > ? AND kv.id <= ?"))
 	dialect.CountCurrentSQL = q(fmt.Sprintf(countSQL, "AND kv.name > ?"))
 	dialect.CountRevisionSQL = q(fmt.Sprintf(countSQL, "AND kv.name > ? AND kv.id <= ?"))
-	dialect.InsertSQL = q(`INSERT INTO kine (id, name, created, deleted, create_revision, prev_revision, lease, value, old_value) OUTPUT INSERTED.id VALUES (NEXT VALUE FOR kine_identity_sequence, ?, ?, ?, ?, ?, ?, ?, ?)`)
-
+	dialect.InsertSQL = q(
+		`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+			 INSERT INTO kine (id, name, created, deleted, create_revision, prev_revision, lease, value, old_value) OUTPUT INSERTED.id VALUES (NEXT VALUE FOR kine_identity_sequence, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	dialect.FillSQL = q(
+		`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; 
+			 INSERT INTO kine(id, name, created, deleted, create_revision, prev_revision, lease, value, old_value) values(?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	dialect.FillRetryDuration = time.Millisecond + 5
 
 	dialect.InsertRetry = func(err error) bool {
