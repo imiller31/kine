@@ -41,7 +41,6 @@ var (
 				lease int,
 				value varbinary(max),
 				old_value varbinary(max) );
-			SET IDENTITY_INSERT kine ON;
 		end 
 		`,
 		`if not exists (select * from sys.sequences where name = 'kine_identity_sequence' AND schema_id = SCHEMA_ID('dbo'))
