@@ -16,7 +16,7 @@ start-test() {
               -C
               -U sa
               -P $pass
-              -Q 'SELECT session_id FROM sys.dm_exec_connections;'" \
+              -Q \"SELECT session_id FROM sys.dm_exec_connections;/"" \
     timeout --foreground 1m bash -c "wait-for-db-connection"
     KINE_IMAGE=$IMAGE KINE_ENDPOINT="sqlserver://$ip:$port?database=kine" provision-kine
     local kine_url=$(cat $TEST_DIR/kine/*/metadata/url)
